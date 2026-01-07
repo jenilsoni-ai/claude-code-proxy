@@ -1,8 +1,8 @@
-# Anthropic API Proxy for Gemini & OpenAI Models 🔄
+# Anthropic API Proxy for Gemini, OpenAI & Groq Models 🔄
 
-**Use Anthropic clients (like Claude Code) with Gemini, OpenAI, or direct Anthropic backends.** 🤝
+**Use Anthropic clients (like Claude Code) with Gemini, OpenAI, Groq, or direct Anthropic backends.** 🤝
 
-A proxy server that lets you use Anthropic clients with Gemini, OpenAI, or Anthropic models themselves (a transparent proxy of sorts), all via LiteLLM. 🌉
+A proxy server that lets you use Anthropic clients with Gemini, OpenAI, Groq, or Anthropic models themselves (a transparent proxy of sorts), all via LiteLLM. 🌉
 
 
 ![Anthropic API Proxy](pic.png)
@@ -13,6 +13,7 @@ A proxy server that lets you use Anthropic clients with Gemini, OpenAI, or Anthr
 
 - OpenAI API key 🔑
 - Google AI Studio (Gemini) API key (if using Google provider) 🔑
+- Groq API key (if using Groq provider) 🔑
 - Google Cloud Project with Vertex AI API enabled (if using Application Default Credentials for Gemini) ☁️
 - [uv](https://github.com/astral-sh/uv) installed.
 
@@ -41,18 +42,23 @@ A proxy server that lets you use Anthropic clients with Gemini, OpenAI, or Anthr
 
    *   `ANTHROPIC_API_KEY`: (Optional) Needed only if proxying *to* Anthropic models.
    *   `OPENAI_API_KEY`: Your OpenAI API key (Required if using the default OpenAI preference or as fallback).
-   *   `GEMINI_API_KEY`: Your Google AI Studio (Gemini) API key (Required if `PREFERRED_PROVIDER=google` and `USE_VERTEX_AUTH=true`).
+   *   `GEMINI_API_KEY`: Your Google AI Studio (Gemini) API key (Required if `PREFERRED_PROVIDER=google` and `USE_VERTEX_AUTH=false`).
+   *   `GROQ_API_KEY`: Your Groq API key (Required if `PREFERRED_PROVIDER=groq` or using Groq models).
    *   `USE_VERTEX_AUTH` (Optional): Set to `true` to use Application Default Credentials (ADC) will be used (no static API key required). Note: when USE_VERTEX_AUTH=true, you must configure `VERTEX_PROJECT` and `VERTEX_LOCATION`.
    *   `VERTEX_PROJECT` (Optional): Your Google Cloud Project ID (Required if `PREFERRED_PROVIDER=google` and `USE_VERTEX_AUTH=true`).
    *   `VERTEX_LOCATION` (Optional): The Google Cloud region for Vertex AI (e.g., `us-central1`) (Required if `PREFERRED_PROVIDER=google` and `USE_VERTEX_AUTH=true`).
-   *   `PREFERRED_PROVIDER` (Optional): Set to `openai` (default), `google`, or `anthropic`. This determines the primary backend for mapping `haiku`/`sonnet`.
-   *   `BIG_MODEL` (Optional): The model to map `sonnet` requests to. Defaults to `gpt-4.1` (if `PREFERRED_PROVIDER=openai`) or `gemini-2.5-pro-preview-03-25`. Ignored when `PREFERRED_PROVIDER=anthropic`.
-   *   `SMALL_MODEL` (Optional): The model to map `haiku` requests to. Defaults to `gpt-4.1-mini` (if `PREFERRED_PROVIDER=openai`) or `gemini-2.0-flash`. Ignored when `PREFERRED_PROVIDER=anthropic`.
+   *   `OPENAI_BASE_URL` (Optional): Custom OpenAI API endpoint (defaults to https://api.openai.com/v1).
+   *   `GROQ_BASE_URL` (Optional): Custom Groq API endpoint (defaults to https://api.groq.com/openai/v1).
+   *   `PREFERRED_PROVIDER` (Optional): Set to `openai` (default), `google`, `groq`, or `anthropic`. This determines the primary backend for mapping `haiku`/`sonnet`.
+   *   `BIG_MODEL` (Optional): The model to map `sonnet` requests to. Defaults to `gpt-4.1` (if `PREFERRED_PROVIDER=openai`) or `gemini-2.5-pro`. Ignored when `PREFERRED_PROVIDER=anthropic` or `PREFERRED_PROVIDER=groq`.
+   *   `SMALL_MODEL` (Optional): The model to map `haiku` requests to. Defaults to `gpt-4.1-mini` (if `PREFERRED_PROVIDER=openai`) or `gemini-2.5-flash`. Ignored when `PREFERRED_PROVIDER=anthropic` or `PREFERRED_PROVIDER=groq`.
 
    **Mapping Logic:**
    - If `PREFERRED_PROVIDER=openai` (default), `haiku`/`sonnet` map to `SMALL_MODEL`/`BIG_MODEL` prefixed with `openai/`.
    - If `PREFERRED_PROVIDER=google`, `haiku`/`sonnet` map to `SMALL_MODEL`/`BIG_MODEL` prefixed with `gemini/` *if* those models are in the server's known `GEMINI_MODELS` list (otherwise falls back to OpenAI mapping).
+   - If `PREFERRED_PROVIDER=groq`, requests are sent directly to Groq with the `groq/` prefix (no haiku/sonnet remapping).
    - If `PREFERRED_PROVIDER=anthropic`, `haiku`/`sonnet` requests are passed directly to Anthropic with the `anthropic/` prefix without remapping to different models.
+   - You can also use any Groq model by specifying `groq/model-name` directly in your client requests.
 
 4. **Run the server**:
    ```bash

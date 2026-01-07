@@ -81,6 +81,7 @@ app = FastAPI()
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 # Get Vertex AI project and location from environment (if set)
 VERTEX_PROJECT = os.environ.get("VERTEX_PROJECT", "unset")
@@ -91,6 +92,9 @@ USE_VERTEX_AUTH = os.environ.get("USE_VERTEX_AUTH", "False").lower() == "true"
 
 # Get OpenAI base URL from environment (if set)
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL")
+
+# Get Groq base URL from environment (defaults to official Groq endpoint)
+GROQ_BASE_URL = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 
 # Get preferred provider (default to openai)
 PREFERRED_PROVIDER = os.environ.get("PREFERRED_PROVIDER", "openai").lower()
@@ -121,6 +125,58 @@ GEMINI_MODELS = [
     "gemini-2.5-flash",
     "gemini-2.5-pro"
 ]
+
+# List of Groq models
+# GROQ_MODELS = [
+#     "mixtral-8x7b-32768",
+#     "llama-3.1-405b",
+#     "llama-3.1-70b",
+#     "llama-3.1-8b",
+#     "llama-3.2-90b-vision-preview",
+#     "llama-3.2-11b-vision-preview",
+#     "llama-3.2-1b",
+#     "llama-3.2-3b",
+#     "llama-guard-3-8b",
+#     "llama-guard-3-1-8b",
+#     "gemma-2-9b-it",
+#     "gemma2-9b-it"
+# ]
+
+GROQ_MODELS = [
+    # Llama 3.1 Series (Most reliable, high performance)
+    "llama-3.1-405b-reasoning",      # Successor to llama-3.1-405b
+    "llama-3.1-70b-versatile",       # Most popular 70B
+    "llama-3.1-8b-instant",          # Fastest small model
+    
+    # Llama 3.2 Series (Your current list - still valid)
+    "llama-3.2-90b-vision-preview",
+    "llama-3.2-11b-vision-preview", 
+    "llama-3.2-3b",
+    "llama-3.2-1b",
+    
+    # Mixtral (Excellent for coding/general use)
+    "mixtral-8x7b-32768",
+    
+    # Gemma 2 Series
+    "gemma2-9b-it",
+    "gemma2-2b-it",
+    
+    # Qwen Series (Strong reasoning)
+    "qwen-2.5-32b-instruct",
+    "qwen-2.5-14b-instruct",
+    
+    # Guard Models (Safety/Moderation)
+    "llama-guard-3-8b",
+    "llama-guard-3-1-8b",
+    
+    # Distilled/Preview models from your proxy logs
+    "gpt-oss-120b",                  # Works in your setup
+    "gpt-oss-20b",
+    
+    # DeepSeek (Reasoning specialist)
+    "deepseek-r1-distill-qwen-32b"
+]
+
 
 # Helper function to clean schema for Gemini
 def clean_gemini_schema(schema: Any) -> Any:
@@ -212,6 +268,8 @@ class MessagesRequest(BaseModel):
             clean_v = clean_v[7:]
         elif clean_v.startswith('gemini/'):
             clean_v = clean_v[7:]
+        elif clean_v.startswith('groq/'):
+            clean_v = clean_v[5:]
 
         # --- Mapping Logic --- START ---
         mapped = False
@@ -222,7 +280,14 @@ class MessagesRequest(BaseModel):
 
         # Map Haiku to SMALL_MODEL based on provider preference
         elif 'haiku' in clean_v.lower():
-            if PREFERRED_PROVIDER == "google" and SMALL_MODEL in GEMINI_MODELS:
+            # Determine which provider the SMALL_MODEL belongs to
+            if SMALL_MODEL in GROQ_MODELS:
+                new_model = f"groq/{SMALL_MODEL}"
+                mapped = True
+            elif SMALL_MODEL in GEMINI_MODELS:
+                new_model = f"gemini/{SMALL_MODEL}"
+                mapped = True
+            elif PREFERRED_PROVIDER == "google" and SMALL_MODEL in GEMINI_MODELS:
                 new_model = f"gemini/{SMALL_MODEL}"
                 mapped = True
             else:
@@ -231,7 +296,14 @@ class MessagesRequest(BaseModel):
 
         # Map Sonnet to BIG_MODEL based on provider preference
         elif 'sonnet' in clean_v.lower():
-            if PREFERRED_PROVIDER == "google" and BIG_MODEL in GEMINI_MODELS:
+            # Determine which provider the BIG_MODEL belongs to
+            if BIG_MODEL in GROQ_MODELS:
+                new_model = f"groq/{BIG_MODEL}"
+                mapped = True
+            elif BIG_MODEL in GEMINI_MODELS:
+                new_model = f"gemini/{BIG_MODEL}"
+                mapped = True
+            elif PREFERRED_PROVIDER == "google" and BIG_MODEL in GEMINI_MODELS:
                 new_model = f"gemini/{BIG_MODEL}"
                 mapped = True
             else:
@@ -240,7 +312,10 @@ class MessagesRequest(BaseModel):
 
         # Add prefixes to non-mapped models if they match known lists
         elif not mapped:
-            if clean_v in GEMINI_MODELS and not v.startswith('gemini/'):
+            if clean_v in GROQ_MODELS and not v.startswith('groq/'):
+                new_model = f"groq/{clean_v}"
+                mapped = True # Technically mapped to add prefix
+            elif clean_v in GEMINI_MODELS and not v.startswith('gemini/'):
                 new_model = f"gemini/{clean_v}"
                 mapped = True # Technically mapped to add prefix
             elif clean_v in OPENAI_MODELS and not v.startswith('openai/'):
@@ -252,7 +327,7 @@ class MessagesRequest(BaseModel):
             logger.debug(f"📌 MODEL MAPPING: '{original_model}' ➡️ '{new_model}'")
         else:
              # If no mapping occurred and no prefix exists, log warning or decide default
-             if not v.startswith(('openai/', 'gemini/', 'anthropic/')):
+             if not v.startswith(('openai/', 'gemini/', 'anthropic/', 'groq/')):
                  logger.warning(f"⚠️ No prefix or mapping rule for model: '{original_model}'. Using as is.")
              new_model = v # Ensure we return the original if no rule applied
 
@@ -290,12 +365,21 @@ class TokenCountRequest(BaseModel):
             clean_v = clean_v[7:]
         elif clean_v.startswith('gemini/'):
             clean_v = clean_v[7:]
+        elif clean_v.startswith('groq/'):
+            clean_v = clean_v[5:]
 
         # --- Mapping Logic --- START ---
         mapped = False
         # Map Haiku to SMALL_MODEL based on provider preference
         if 'haiku' in clean_v.lower():
-            if PREFERRED_PROVIDER == "google" and SMALL_MODEL in GEMINI_MODELS:
+            # Determine which provider the SMALL_MODEL belongs to
+            if SMALL_MODEL in GROQ_MODELS:
+                new_model = f"groq/{SMALL_MODEL}"
+                mapped = True
+            elif SMALL_MODEL in GEMINI_MODELS:
+                new_model = f"gemini/{SMALL_MODEL}"
+                mapped = True
+            elif PREFERRED_PROVIDER == "google" and SMALL_MODEL in GEMINI_MODELS:
                 new_model = f"gemini/{SMALL_MODEL}"
                 mapped = True
             else:
@@ -304,7 +388,14 @@ class TokenCountRequest(BaseModel):
 
         # Map Sonnet to BIG_MODEL based on provider preference
         elif 'sonnet' in clean_v.lower():
-            if PREFERRED_PROVIDER == "google" and BIG_MODEL in GEMINI_MODELS:
+            # Determine which provider the BIG_MODEL belongs to
+            if BIG_MODEL in GROQ_MODELS:
+                new_model = f"groq/{BIG_MODEL}"
+                mapped = True
+            elif BIG_MODEL in GEMINI_MODELS:
+                new_model = f"gemini/{BIG_MODEL}"
+                mapped = True
+            elif PREFERRED_PROVIDER == "google" and BIG_MODEL in GEMINI_MODELS:
                 new_model = f"gemini/{BIG_MODEL}"
                 mapped = True
             else:
@@ -313,7 +404,10 @@ class TokenCountRequest(BaseModel):
 
         # Add prefixes to non-mapped models if they match known lists
         elif not mapped:
-            if clean_v in GEMINI_MODELS and not v.startswith('gemini/'):
+            if clean_v in GROQ_MODELS and not v.startswith('groq/'):
+                new_model = f"groq/{clean_v}"
+                mapped = True # Technically mapped to add prefix
+            elif clean_v in GEMINI_MODELS and not v.startswith('gemini/'):
                 new_model = f"gemini/{clean_v}"
                 mapped = True # Technically mapped to add prefix
             elif clean_v in OPENAI_MODELS and not v.startswith('openai/'):
@@ -324,7 +418,7 @@ class TokenCountRequest(BaseModel):
         if mapped:
             logger.debug(f"📌 TOKEN COUNT MAPPING: '{original_model}' ➡️ '{new_model}'")
         else:
-             if not v.startswith(('openai/', 'gemini/', 'anthropic/')):
+             if not v.startswith(('openai/', 'gemini/', 'anthropic/', 'groq/')):
                  logger.warning(f"⚠️ No prefix or mapping rule for token count model: '{original_model}'. Using as is.")
              new_model = v # Ensure we return the original if no rule applied
 
@@ -546,11 +640,11 @@ def convert_anthropic_to_litellm(anthropic_request: MessagesRequest) -> Dict[str
                 
                 messages.append({"role": msg.role, "content": processed_content})
     
-    # Cap max_tokens for OpenAI models to their limit of 16384
+    # Cap max_tokens for OpenAI and Groq models to their limit of 16384
     max_tokens = anthropic_request.max_tokens
-    if anthropic_request.model.startswith("openai/") or anthropic_request.model.startswith("gemini/"):
+    if anthropic_request.model.startswith("openai/") or anthropic_request.model.startswith("gemini/") or anthropic_request.model.startswith("groq/"):
         max_tokens = min(max_tokens, 16384)
-        logger.debug(f"Capping max_tokens to 16384 for OpenAI/Gemini model (original value: {anthropic_request.max_tokens})")
+        logger.debug(f"Capping max_tokens to 16384 for OpenAI/Gemini/Groq model (original value: {anthropic_request.max_tokens})")
     
     # Create LiteLLM request dict
     litellm_request = {
@@ -647,9 +741,12 @@ def convert_litellm_to_anthropic(litellm_response: Union[Dict[str, Any], Any],
             clean_model = clean_model[len("anthropic/"):]
         elif clean_model.startswith("openai/"):
             clean_model = clean_model[len("openai/"):]
+        elif clean_model.startswith("groq/"):
+            clean_model = clean_model[len("groq/"):]
         
         # Check if this is a Claude model (which supports content blocks)
-        is_claude_model = clean_model.startswith("claude-")
+        # Groq models also support content blocks in their chat completion API
+        is_claude_model = clean_model.startswith("claude-") or original_request.model.startswith("groq/")
         
         # Handle ModelResponse object from LiteLLM
         if hasattr(litellm_response, 'choices') and hasattr(litellm_response, 'usage'):
@@ -1123,7 +1220,12 @@ async def create_message(
         litellm_request = convert_anthropic_to_litellm(request)
         
         # Determine which API key to use based on the model
-        if request.model.startswith("openai/"):
+        if request.model.startswith("groq/"):
+            # LiteLLM automatically uses GROQ_API_KEY from environment
+            # Just set the api_base for custom Groq endpoints if needed
+            litellm_request["api_base"] = GROQ_BASE_URL
+            logger.debug(f"Using Groq API (GROQ_API_KEY from env) and base URL {GROQ_BASE_URL} for model: {request.model}")
+        elif request.model.startswith("openai/"):
             litellm_request["api_key"] = OPENAI_API_KEY
             # Use custom OpenAI base URL if configured
             if OPENAI_BASE_URL:
@@ -1144,9 +1246,10 @@ async def create_message(
             litellm_request["api_key"] = ANTHROPIC_API_KEY
             logger.debug(f"Using Anthropic API key for model: {request.model}")
         
-        # For OpenAI models - modify request format to work with limitations
-        if "openai" in litellm_request["model"] and "messages" in litellm_request:
-            logger.debug(f"Processing OpenAI model request: {litellm_request['model']}")
+        # For OpenAI and Groq models - modify request format to work with limitations
+        # (Groq uses OpenAI-compatible format)
+        if ("openai" in litellm_request["model"] or "groq" in litellm_request["model"]) and "messages" in litellm_request:
+            logger.debug(f"Processing OpenAI/Groq model request: {litellm_request['model']}")
             
             # For OpenAI models, we need to convert content blocks to simple strings
             # and handle other requirements
@@ -1444,6 +1547,9 @@ async def count_tokens(
             # Add custom base URL for OpenAI models if configured
             if request.model.startswith("openai/") and OPENAI_BASE_URL:
                 token_counter_args["api_base"] = OPENAI_BASE_URL
+            # Add Groq base URL for Groq models
+            elif request.model.startswith("groq/"):
+                token_counter_args["api_base"] = GROQ_BASE_URL
             
             # Count tokens
             token_count = token_counter(**token_counter_args)
